@@ -91,6 +91,10 @@ def augment_image(image, keypoints, seed, cropped, ht, wd):
     
     # Augment keypoints and images.
     image_aug, kps_aug = seq(image=image,  keypoints=keypoints)
+    kps_aug = kps_aug.clip_out_of_image_()
+    # kps_aug = kps_aug.remove_out_of_image(fully=True).cut_out_of_image()
+    kps_aug = kps_aug.remove_out_of_image_fraction(0.5)
+
     return image_aug, kps_aug
 
 
@@ -198,24 +202,28 @@ def get_annotation_lists(im_id, image, cropped, ht, wd, ct):
             # print(per_damage)
             # print(crop_seg)
             segmentation_list.append(crop_seg)
-            new_bb = [x for pair in bbox_aug for x in pair] 
-            new_bb_x, new_bb_y, new_w, new_h = new_bb[0], new_bb[1], new_bb[2]-new_bb[0], new_bb[3]-new_bb[1]
-            new_bbox = [new_bb_x, new_bb_y, new_w, new_h]
-            # print('New BBOX: ', new_bbox)
-            # print('Old seg: ', per_damage)
-            # print('New seg: ', crop_seg)
+            new_bb = [x for pair in bbox_aug for x in pair]
+            if bbox_aug and crop_seg and (len(new_bb) == 4): 
+                new_bb_x, new_bb_y, new_w, new_h = new_bb[0], new_bb[1], new_bb[2]-new_bb[0], new_bb[3]-new_bb[1]
+                new_bbox = [new_bb_x, new_bb_y, new_w, new_h]
+                # print('New BBOX: ', new_bbox)
+                # print('Old seg: ', per_damage)
+                # print('New seg: ', crop_seg)
 
-        # write into dictionary
-            # print("SEG LIST: ", segmentation_list)
-            cropped_annotation['segmentation'] = segmentation_list
-            cropped_annotation['area'] = area
-            cropped_annotation['iscrowd'] = iscrowd
-            cropped_annotation['image_id'] = img_id
-            cropped_annotation['bbox'] = new_bbox
-            cropped_annotation['category_id'] = cat_id
-            cropped_annotation['id'] = index
+            # write into dictionary
+                # print("SEG LIST: ", segmentation_list)
+                cropped_annotation['segmentation'] = segmentation_list
+                cropped_annotation['area'] = area
+                cropped_annotation['iscrowd'] = iscrowd
+                cropped_annotation['image_id'] = img_id
+                cropped_annotation['bbox'] = new_bbox
+                cropped_annotation['category_id'] = cat_id
+                cropped_annotation['id'] = index
+            else:
+                pass
             # print("crop annotation: ", cropped_annotation)
-        ann_per_img.append(cropped_annotation)
+        if cropped_annotation:
+            ann_per_img.append(cropped_annotation)
     # kpsoi = KeypointsOnImage(all_keypoints, shape=image.shape)
         # display_image(img_path, keypoints_aug, image_aug)
         # display_image(img_path, bbpoints_aug, image_aug) 
@@ -269,21 +277,35 @@ if __name__ == "__main__":
                         crop_cor = [math.ceil(x) for x in crop_pts]
                         crop_img = Image.fromarray(image).crop((crop_pts[0], crop_pts[1], crop_pts[2], crop_pts[3]))
                         crop_w, crop_h =  crop_img.size
-                        
-                        if os.path.exists(dst+im['file_name']):
-                            print('Already exist')
-                        else:
+                        print('IMG SIZE: ', crop_img.size)
+
+                        # img_d['file_name'] = crop_panel + '_' + im['file_name']
+                        # img_d['height'] = crop_h
+                        # img_d['width'] = crop_w
+                        # img_d['id'] = count
+                        # im_list.append(img_d)
+                        crop_img = cv2.cvtColor(np.array(crop_img), cv2.COLOR_BGR2RGB)
+                        # Image.fromarray(crop_img).save(dst+'{}_{}'.format(crop_panel, im['file_name']))
+                        annotation_per_img, img_aug = get_annotation_lists(im_id, image, crop_cor, ht, wd, count)
+                        if annotation_per_img:
                             img_d['file_name'] = crop_panel + '_' + im['file_name']
                             img_d['height'] = crop_h
                             img_d['width'] = crop_w
                             img_d['id'] = count
                             im_list.append(img_d)
-                            crop_img = cv2.cvtColor(np.array(crop_img), cv2.COLOR_BGR2RGB)
-                            Image.fromarray(crop_img).save(dst+'{}_{}'.format(crop_panel, im['file_name']))
-                            annotation_per_img, img_aug = get_annotation_lists(im_id, image, crop_cor, ht, wd, count)
-                            print(annotation_per_img)
                             ann_list.extend(annotation_per_img)
                             count+=1
+ 
+                            if os.path.exists(dst+im['file_name']):
+                                print('Already exist!')
+                            else:
+                                print(crop_panel)
+                                # annotation_per_img, img_aug = get_annotation_lists(im_id, image, crop_cor, ht, wd, count)
+                                # print(annotation_per_img)
+                                # ann_list.extend(annotation_per_img)
+                                # count+=1
+                                Image.fromarray(crop_img).save(dst+'{}_{}'.format(crop_panel, im['file_name']))
+
     
     output_dir = '/Users/maixueqiao/Desktop/cropped/annotations/crop.json'
     save_coco(output_dir, info, licenses, im_list, ann_list, categories)
